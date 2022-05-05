@@ -49,16 +49,16 @@ indexing (Just (Just e)) = brackets $ pPrint e
 indexing' :: Pretty a => Maybe (String, Maybe a) -> Doc
 indexing' Nothing = empty
 indexing' (Just (i, Nothing)) = text i
-indexing' (Just (i, Just e)) = text i <> brackets (pPrint e)
+indexing' (Just (i, Just e)) = brackets (pPrint e) <> text i 
 
 initialize :: Pretty a => Maybe a -> Maybe FullType -> Doc --changed
 -- e: FunctionCall FuncIdTypeSpect (TypeSpec .. Vec2) (Params ..)
-initialize Nothing (Just t) = text "TAAA" <>  char ':' <> char ' ' <> pPrint t 
+initialize Nothing (Just t) =  char ':' <+> char ' ' <> pPrint t 
 -- 
 -- initialize (Just e) t = char ':' <> char ' ' <> pPrint t <> pPrint e
-initialize (Just e) Nothing = text "UUUU" <> pPrint e
+initialize (Just e) Nothing =   char ' ' <> pPrint e 
 initialize (Just e) (Just t) = char ':' <> char ' ' <> pPrint t <> text " = " <> pPrint e
-initialize Nothing Nothing = text "TOOOO" 
+initialize Nothing Nothing = empty
 
 
 
@@ -118,7 +118,7 @@ instance Pretty ExternalDeclaration where
 
 ----------------------------- Declaration -------------------------------------------------
 getVal :: [InitDeclarator] -> InitDeclarator -> Doc
--- getVal _ dec@(InitDecl i Nothing Nothing (Just v)) = text "let TAh" <+> pPrint dec <> semi  <> char '\r'
+getVal _ dec@(InitDecl i Nothing Nothing (Just v)) = text "let" <+>  pPrint dec <> semi  <> char '\r'
 
 
 
@@ -143,6 +143,7 @@ instance Pretty Declaration where --changed
   --
   -- typical let or var declaration without a value
   pPrint (InitDeclaration _ [d]) = text "let" <+> pPrint d <> semi
+
   --
   -- pPrint (InitDeclaration t ds) = hsep $ map (getVal (reverse ds)) ds
 
@@ -175,14 +176,19 @@ instance Pretty InitDeclarator where --changed
 -- a: Nothing
 -- b: value
 -- t: type
--- (convertToFloat t b) is just b normally, but we check if the type is a float and
--- change the value(s) to floats if it is
-  pPrint (InitDecl i Nothing Nothing t) = text i <> colon <> pPrint t;
+
+  -- array
+
+  -- no value, but a type declaration
+  pPrint (InitDecl i a Nothing t) = text i <> colon <> initialize t (Nothing :: Maybe FullType)  <> indexing a ;
+
   -- pPrint (InitDecl i Nothing Nothing 
   --   tt@(Just (FullType Nothing (TypeSpec Nothing (TypeSpecNoPrecision Int Nothing))))) = text i <> 
   --     initialize tt (Nothing :: Maybe FullType) 
 
-  pPrint (InitDecl i a b t) = text i <> indexing a <> initialize (convertToFloat t b) t
+  -- (convertToFloat t b) is just b normally, but we check if the type is a float and
+  -- change the value(s) to floats if it is
+  pPrint (InitDecl i a b t) = text i  <> initialize (convertToFloat t b) t <> indexing a
     where
       --if the type is a float, but the number is an integer, convert to it to a float.
       --pattern match on simple Float type, and get the value
@@ -271,7 +277,7 @@ instance Pretty PrecisionQualifier where
   pPrint LowP = text "lowp"
 
 instance Pretty TypeSpecifierNoPrecision where
-  pPrint (TypeSpecNoPrecision t a) = pPrint t <+> indexing a
+  pPrint (TypeSpecNoPrecision t a) = pPrint t <> indexing a
 
 instance Pretty TypeSpecifierNonArray where
   pPrint t = case t of
@@ -341,12 +347,28 @@ instance Pretty TypeSpecifierNonArray where
     ISampler2DMSArray -> text "isampler2DMSArray"
     USampler2DMSArray -> text "usampler2DMSArray"
     StructSpecifier i ds ->
-      vcat [text "struct" <+> i', lbrace, nest 2 (vcat $ map pPrint ds), rbrace]
+      vcat [text "struct" <+> i', lbrace, char ' ', nest 2 (vcat $ map pPrint ds), rbrace]
       where
         i' = case i of Nothing -> empty; Just n -> text n
     TypeName i -> text i
 
 instance Pretty Field where --changed
+{-
+struct PatternBlock
+{
+  pattern: f32[100];
+  arr: f32[];
+}
+-}
+  -- field with array with a fixed number of elements
+  pPrint (Field tq s [StructDeclarator name (Just ( Just (IntConstant Decimal num)))]) =
+    option tq <+> text name <> colon <+> pPrint s <> brackets (pPrint num) <> semi
+
+  -- field with array with no number in array
+  pPrint (Field tq s [StructDeclarator name (Just Nothing)]) =
+    option tq <+> text name <> colon <+> pPrint s <> brackets empty <> semi
+
+  -- field with no array
   pPrint (Field tq s ds) =
     option tq <+> hsep (punctuate comma $ map pPrint ds) <> colon <+> pPrint s <> semi
 
@@ -475,8 +497,11 @@ instance Pretty FunctionPrototype where --changed
       voidf ft = text " -> " <+> pPrint ft
 
 instance Pretty ParameterDeclaration where
+  pPrint (ParameterDeclaration tq q s (Just (i, e))) =
+    option tq <+> option q   <+>  text i <> text ": " <+> pPrint s <> indexing (Just e) 
+
   pPrint (ParameterDeclaration tq q s i) =
-    option tq <+> option q <+> indexing' i <> text ": " <+> pPrint s
+    option tq <+> option q  <> text ": " <+>  pPrint s <> indexing' i
 
 instance Pretty ParameterTypeQualifier where
   pPrint ConstParameter = text "const"

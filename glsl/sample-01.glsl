@@ -15,12 +15,12 @@ mat2 mat2D;
 mat3 optMatrix;
 mat4 view;
 mat3x2 m;
-struct light
+struct Light
 {
   float intensity;
   vec3 position;
-} lightVar;
-light lightVar3;
+};
+light lightVar;
 float frequencies[3];
 uniform vec4 lightPosition[4];
 light lights[];

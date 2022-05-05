@@ -111,12 +111,27 @@ TranslationUnit
     )
 ]
 
-fn main (x:  f32, v:  vec2<f32>)  ->  f32
-{
-  let i: i32 = 34; 
-  let k: i32 = 42; 
-  let j: i32 = 42; 
- 
-  let blah: i32 = 3;
-  k = 56;
-}
+TranslationUnit 
+[Declaration (
+    InitDeclaration (
+        TypeDeclarator (FullType Nothing (TypeSpec Nothing (TypeSpecNoPrecision Float Nothing)))
+    ) [
+        InitDecl "frequencies" (Just (Just (IntConstant Decimal 3))) Nothing 
+        (Just (FullType Nothing (TypeSpec Nothing (TypeSpecNoPrecision Float Nothing))))
+    ])]
+
+TranslationUnit 
+[Declaration (
+    Block (
+        TypeQualLay (Layout [LayoutQualId "std140" Nothing]) (Just Uniform)) 
+            "PatternBlock" [
+                    Field Nothing (TypeSpec Nothing (TypeSpecNoPrecision Float Nothing)) [
+                        StructDeclarator "pattern" (Just (Just (IntConstant Decimal 100))
+                        )
+                    ],
+                    Field Nothing (TypeSpec Nothing (TypeSpecNoPrecision Float Nothing)) [
+                        StructDeclarator "arr" (Just Nothing)
+                    ]
+            ] Nothing
+    )
+]

@@ -1,4 +1,8 @@
-int i, j;
+layout (std140) uniform PatternBlock
+{ float pattern[100];
+  float arr[];
+};
+// array<vec2<f32>, 8>
 
 // // layout(set = 0, binding = 0) uniform SystemUniform {
 // //   mat4 projectionMatrix;
