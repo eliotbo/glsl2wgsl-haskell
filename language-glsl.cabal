@@ -1,0 +1,58 @@
+name:                glsl2wgsl
+version:             0.1.0
+Cabal-Version:       >= 1.8
+synopsis:            converts glsl code to wgsl
+description:
+  The package is based on the Haskell language-glsl library for parsing
+  and pretty-printing code of GLSL 1.50. The pretty-printing part is
+  adapted to produce wgsl code.
+
+
+category:            Language, Graphics
+license:             BSD3
+license-file:        LICENSE
+author:              Vo Minh Thu
+maintainer:          noteed@gmail.com
+build-type:          Simple
+
+extra-source-files:  glsl/sample-01.glsl
+
+source-repository head
+  type: git
+  location: https://github.com/eliotbo/glsl2wgsl
+
+library
+  build-depends:       base < 5,
+                       parsec,
+                       mtl >= 1.2,
+                       prettyclass
+  ghc-options:         -Wall
+  exposed-modules:     Language.GLSL,
+                       Language.GLSL.WGSLParser,
+                       Language.GLSL.Parser,
+                       Language.GLSL.Pretty,
+                       Language.GLSL.Syntax
+
+executable glsl-pprint
+  main-is:             glsl-pprint.hs
+  hs-source-dirs:      bin/
+  build-depends:       base < 5,
+                       glsl2wgsl,
+                       parsec,
+                       mtl >= 1.2,
+                       prettyclass
+  ghc-options:         -Wall
+
+Test-Suite tests
+  Type:            exitcode-stdio-1.0
+  build-depends:   base < 5,
+                   HUnit,
+                   glsl2wgsl,
+                   parsec,
+                   mtl >= 1.2,
+                   prettyclass,
+                   test-framework,
+                   test-framework-hunit
+  ghc-options:     -Wall
+  Hs-Source-Dirs:  tests
+  main-is:         Tests.hs
