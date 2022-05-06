@@ -49,18 +49,16 @@ indexing (Just (Just e)) = brackets $ pPrint e
 indexing' :: Pretty a => Maybe (String, Maybe a) -> Doc
 indexing' Nothing = empty
 indexing' (Just (i, Nothing)) = text i
-indexing' (Just (i, Just e)) = brackets (pPrint e) <> text i 
+indexing' (Just (i, Just e)) = brackets (pPrint e) <> text i
 
 initialize :: Pretty a => Maybe a -> Maybe FullType -> Doc --changed
 -- e: FunctionCall FuncIdTypeSpect (TypeSpec .. Vec2) (Params ..)
-initialize Nothing (Just t) =  char ':' <+> char ' ' <> pPrint t 
--- 
+initialize Nothing (Just t) = char ':' <+> char ' ' <> pPrint t
+--
 -- initialize (Just e) t = char ':' <> char ' ' <> pPrint t <> pPrint e
-initialize (Just e) Nothing =   char ' ' <> pPrint e 
+initialize (Just e) Nothing = char ' ' <> pPrint e
 initialize (Just e) (Just t) = char ':' <> char ' ' <> pPrint t <> text " = " <> pPrint e
 initialize Nothing Nothing = empty
-
-
 
 -- initialize (Just e) = char ' ' <> equals <+> pPrint e
 
@@ -118,11 +116,9 @@ instance Pretty ExternalDeclaration where
 
 ----------------------------- Declaration -------------------------------------------------
 getVal :: [InitDeclarator] -> InitDeclarator -> Doc
-getVal _ dec@(InitDecl i Nothing Nothing (Just v)) = text "let" <+>  pPrint dec <> semi  <> char '\r'
+getVal _ dec@(InitDecl i Nothing Nothing (Just v)) = text "let" <+> pPrint dec <> semi
+getVal decs dec = text "let" <+> pPrint (consDec (getLastVal decs) dec) <> semi
 
-
-
-getVal decs dec = text "let" <+> pPrint (consDec (getLastVal decs) dec) <> semi  <> char '\r'
 -- example: InitDecl "i" Nothing (Just (IntConstant Decimal 34)) (Just (FullType Nothing (..)))
 -- recursively find the value, prioritizing the leftmost value
 getLastVal :: [InitDeclarator] -> InitDeclarator
@@ -138,21 +134,19 @@ consDec _ ownDec@(InitDecl _ _ (Just _) _) = ownDec
 consDec (InitDecl _ w ty p) (InitDecl s _ _ _) = InitDecl s w ty p
 
 instance Pretty Declaration where --changed
-  -- struct
+-- struct
   pPrint (InitDeclaration typeDec []) = pPrint typeDec <> semi
   --
   -- typical let or var declaration without a value
   pPrint (InitDeclaration _ [d]) = text "let" <+> pPrint d <> semi
-
   --
   -- pPrint (InitDeclaration t ds) = hsep $ map (getVal (reverse ds)) ds
 
   --case of comma separated declarations: take the value assigned to the first var
-  pPrint (InitDeclaration _ ds) = hsep $ map (getVal (reverse ds)) ds
------------------------------------ Declaration -------------------------------------------
+  pPrint (InitDeclaration _ ds) = vcat $ map (getVal (reverse ds)) ds
+  ----------------------------------- Declaration -------------------------------------------
 
-      --
-
+  --
 
   -- pPrint (InitDeclaration it ds) = pPrint it <+> hsep (punctuate comma (map pPrint ds)) <> semi
   pPrint (Precision pq t) = text "precision" <+> pPrint pq <+> pPrint t <> semi
@@ -180,15 +174,14 @@ instance Pretty InitDeclarator where --changed
   -- array
 
   -- no value, but a type declaration
-  pPrint (InitDecl i a Nothing t) = text i <> colon <> initialize t (Nothing :: Maybe FullType)  <> indexing a ;
-
-  -- pPrint (InitDecl i Nothing Nothing 
-  --   tt@(Just (FullType Nothing (TypeSpec Nothing (TypeSpecNoPrecision Int Nothing))))) = text i <> 
-  --     initialize tt (Nothing :: Maybe FullType) 
+  pPrint (InitDecl i a Nothing t) = text i <> colon <> initialize t (Nothing :: Maybe FullType) <> indexing a
+  -- pPrint (InitDecl i Nothing Nothing
+  --   tt@(Just (FullType Nothing (TypeSpec Nothing (TypeSpecNoPrecision Int Nothing))))) = text i <>
+  --     initialize tt (Nothing :: Maybe FullType)
 
   -- (convertToFloat t b) is just b normally, but we check if the type is a float and
   -- change the value(s) to floats if it is
-  pPrint (InitDecl i a b t) = text i  <> initialize (convertToFloat t b) t <> indexing a
+  pPrint (InitDecl i a b t) = text i <> initialize (convertToFloat t b) t <> indexing a
     where
       --if the type is a float, but the number is an integer, convert to it to a float.
       --pattern match on simple Float type, and get the value
@@ -196,7 +189,6 @@ instance Pretty InitDeclarator where --changed
       convertToFloat
         (Just (FullType _ (TypeSpec _ (TypeSpecNoPrecision Float _))))
         (Just (IntConstant Decimal value)) = Just (FloatConstant $ fromIntegral value)
-      
       --
       -- match on types that are used by isFloat
       convertToFloat
@@ -360,14 +352,12 @@ struct PatternBlock
   arr: f32[];
 }
 -}
-  -- field with array with a fixed number of elements
-  pPrint (Field tq s [StructDeclarator name (Just ( Just (IntConstant Decimal num)))]) =
+-- field with array with a fixed number of elements
+  pPrint (Field tq s [StructDeclarator name (Just (Just (IntConstant Decimal num)))]) =
     option tq <+> text name <> colon <+> pPrint s <> brackets (pPrint num) <> semi
-
   -- field with array with no number in array
   pPrint (Field tq s [StructDeclarator name (Just Nothing)]) =
     option tq <+> text name <> colon <+> pPrint s <> brackets empty <> semi
-
   -- field with no array
   pPrint (Field tq s ds) =
     option tq <+> hsep (punctuate comma $ map pPrint ds) <> colon <+> pPrint s <> semi
@@ -402,7 +392,7 @@ instance Pretty Expr where
       prettyParen (p > 16) $ -- changed
       -- pPrint i <> char ' ' <> equals <+> parens (pPrint ps)
       -- char ' ' <> equals <+> pPrint i <+> parens (pPrint ps)
-        pPrint i <+> parens (pPrint ps)
+        pPrint i <> parens (pPrint ps)
     -- parens (pPrint ps) <+>  pPrint i
 
     PostInc e1 ->
@@ -463,16 +453,17 @@ instance Pretty Expr where
           <+> rbrace
     -- assignment, the left Expr should be unary expression
     Equal e1 e2 -> prettyBinary l p 2 assocRight "=" e1 e2
-    MulAssign e1 e2 -> prettyBinary l p 2 assocRight "*=" e1 e2
-    DivAssign e1 e2 -> prettyBinary l p 2 assocRight "/=" e1 e2
-    ModAssign e1 e2 -> prettyBinary l p 2 assocRight "%=" e1 e2
-    AddAssign e1 e2 -> prettyBinary l p 2 assocRight "+=" e1 e2
-    SubAssign e1 e2 -> prettyBinary l p 2 assocRight "-=" e1 e2
-    LeftAssign e1 e2 -> prettyBinary l p 2 assocRight "<<=" e1 e2
-    RightAssign e1 e2 -> prettyBinary l p 2 assocRight ">>=" e1 e2
-    AndAssign e1 e2 -> prettyBinary l p 2 assocRight "&=" e1 e2
-    XorAssign e1 e2 -> prettyBinary l p 2 assocRight "^=" e1 e2
-    OrAssign e1 e2 -> prettyBinary l p 2 assocRight "|=" e1 e2
+    -- MulAssign e1 e2 -> prettyBinary l p 2 assocRight "*=" e1 e2
+    MulAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Mul e1 e2]
+    DivAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Div e1 e2]
+    ModAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Mod e1 e2]
+    AddAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Add e1 e2]
+    SubAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Sub e1 e2]
+    LeftAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ LeftShift e1 e2]
+    RightAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ RightShift e1 e2]
+    AndAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ And e1 e2]
+    XorAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ BitXor e1 e2]
+    OrAssign e1 e2 -> hsep $ [prettyBinary l p 2 assocRight "=" e1 (Variable ""), pPrint $ Or e1 e2]
     -- sequence
     Sequence e1 e2 ->
       prettyParen (p > 1) $
@@ -489,19 +480,20 @@ instance Pretty Parameters where
 instance Pretty FunctionPrototype where --changed
 -- ps:  ParameterDeclaration N N (TypeSpec N (TypeSpecNoPrecision Float N)) (Just ("x", N))
   pPrint (FuncProt t i ps) =
-    text "fn " <> text i <+> char '('
+    text "fn" <+> text i <+> char '('
       <> hsep (punctuate comma $ map pPrint ps)
       <> text ")" <+> voidf t
     where
-      voidf (FullType _ (TypeSpec _ (TypeSpecNoPrecision Void _))) = text ""
-      voidf ft = text " -> " <+> pPrint ft
+      voidf (FullType _ (TypeSpec _ (TypeSpecNoPrecision Void _))) = text "" -- void
+      voidf ft = text " -> " <+> pPrint ft -- if not void return type, print arrow and type
 
 instance Pretty ParameterDeclaration where
-  pPrint (ParameterDeclaration tq q s (Just (i, e))) =
-    option tq <+> option q   <+>  text i <> text ": " <+> pPrint s <> indexing (Just e) 
-
-  pPrint (ParameterDeclaration tq q s i) =
-    option tq <+> option q  <> text ": " <+>  pPrint s <> indexing' i
+  -- parameter with an array type
+  pPrint (ParameterDeclaration tq q s (Just (i, Just e))) =
+    option tq <+> option q <+> text i <> text ": " <+> pPrint s <> indexing (Just (Just e))
+  -- non array parameter
+  pPrint (ParameterDeclaration tq q s (Just (i, Nothing))) =
+    option tq <+> option q <> text i <> text ":" <+> pPrint s
 
 instance Pretty ParameterTypeQualifier where
   pPrint ConstParameter = text "const"
@@ -525,15 +517,27 @@ instance Pretty Statement where
     -- expression statement
     ExpressionStatement e -> option e <> semi
     -- selection statement
-    SelectionStatement e s1 s2 -> vcat [text "if" <+> parens (pPrint e), char '{',  char '\t', nest 2 $  pPrint s1, option s2, char '}']
+    -- SelectionStatement e s1 s2 -> vcat [text "if" <+> parens (pPrint e), nest 2 $  pPrint s1, text "else", option s2]
+    -- with an else clause
+    SelectionStatement e s1 (Just s2) ->
+      vcat
+        [ text "if" <+> parens (pPrint e) <+> lbrace,
+          nest 2 $ pPrint s1,
+          rbrace,
+          text "else" <+> lbrace,
+          nest 2 $ pPrint s2,
+          rbrace
+        ]
+    -- only if clause without the else
+    SelectionStatement e s1 s2 -> vcat [text "if" <+> parens (pPrint e) <+> lbrace, nest 2 $ pPrint s1, rbrace]
     -- switch statement
     SwitchStatement e s1 -> vcat [text "switch" <+> parens (pPrint e), lbrace, nest 2 $ vcat $ map pPrint s1, rbrace]
     CaseLabel l -> pPrint l
     -- iteration statement
     While c s1 -> vcat [text "while" <+> parens (pPrint c), pPrint s1]
     DoWhile s1 e -> vcat [text "do", pPrint s1, text "while" <+> parens (pPrint e)]
-    For (Left e1) c e2 s1 -> vcat [text "for", parens (option e1 <+> semi <+> option c <+> semi <+> option e2), pPrint s1]
-    For (Right d) c e2 s1 -> vcat [text "for", parens (pPrint d <+> semi <+> option c <+> semi <+> option e2), pPrint s1]
+    For (Left e1) c e2 s1 -> vcat [text "for" <+> parens (option e1 <+> semi <+> option c <+> semi <+> option e2), pPrint s1]
+    For (Right d) c e2 s1 -> vcat [text "for" <+> parens (pPrint d <+> semi <+> option c <+> semi <+> option e2), pPrint s1]
 
 instance Pretty Compound where
   pPrint (Compound s) = vcat [lbrace, char ' ', nest 2 $ vcat $ map pPrint s, rbrace]

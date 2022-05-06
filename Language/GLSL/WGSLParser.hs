@@ -1,28 +1,30 @@
-module Language.GLSL.WGSLParser where
+module Language.GLSL.WGSLParser (Leto (Errco, Leto), Name, Position, Par, findLetParse, parseWhole) where
 
-import Control.Monad (join, replicateM_, void)
+import Control.Monad (join, replicateM, void)
 import Data.Char
+import Debug.Trace (trace)
+import Language.GLSL.Parser
+import Language.GLSL.Syntax
+import Text.Parsec.Pos
 import Text.ParserCombinators.Parsec hiding (State, parse)
 import Text.ParserCombinators.Parsec.Expr
-import Text.Parsec.Pos
-
 import Prelude hiding (break, exponent)
-
-import Language.GLSL.Syntax
-import Language.GLSL.Parser
-
 
 data W = W
 
 type Par a = GenParser Char W a
 
 type Name = String
+
 type Position = Int
 
-parseFromFile' :: Par a -> FilePath -> IO (Either ParseError a)
-parseFromFile' p fname = do
-  input <- readFile fname
-  return (runParser p Language.GLSL.WGSLParser.W fname input)
+data Leto = Leto Name Position | Errco
+  deriving (Show)
+
+-- parseFromFile' :: Par a -> FilePath -> IO (Either ParseError a)
+-- parseFromFile' p fname = do
+--   input <- readFile fname
+--   return (runParser p Language.GLSL.WGSLParser.W fname input)
 
 comment' :: Par ()
 comment' = do
@@ -73,7 +75,7 @@ manyany = manyTill anyChar
 linez :: Par String
 linez = many $ char '\n'
 
-spacez :: Par String 
+spacez :: Par String
 spacez = many $ char ' '
 
 spacelinez :: Par String
@@ -87,71 +89,127 @@ wholeText = do
 -- getPosition in a parser. This functions turns the substring starting
 -- at the 13th character into an integer, thus getting the integer line number.
 getLineNumber :: String -> Int
-getLineNumber s = read $ takeWhile isDigit $ substring 13 (13+3) s
+getLineNumber s = read $ takeWhile isDigit $ substring 13 (13 + 3) s
 
 substring :: Int -> Int -> String -> String
 substring start end text = take (end - start) (drop start text)
 
--- gets content as a function of scope: 0 is global, and increasing numbers are chronological
-parseScope :: Int -> [Char] -> Either ParseError (Position, String)
-parseScope n = runParser getScoped W "WGSL"
-  where getScoped = do
-          skipMany blank'
-          choice [try $ betweenBraces n, return (-1, "")]
+-- -- gets content as a function of scope: 0 is global, and increasing numbers are chronological
+-- parseScope :: Int -> [Char] -> Either ParseError (Position, String)
+-- parseScope n = runParser getScoped W "WGSL"
+--   where getScoped = do
+--           skipMany blank'
+--           choice [try $ betweenBraces n, return (-11, "error")]
 
--- the argument is the nth scope to explore
-betweenBraces :: Int -> Par (Position, String)
-betweenBraces n = do
-  replicateM_ n (manyTill anyChar $ char '{')
-  pos <- getPosition
-  scopedContent <- getScopedContent 1
-  return (getLineNumber (show pos), "{" ++ scopedContent)
+-- -- the argument is the nth scope to explore
+-- betweenBraces :: Int -> Par (Position, String)
+-- betweenBraces n = do
+--   -- replicateM_ n (manyTill anyChar $ char '{')
+--   pos <- getPosition
+--   scopedContent <- getScopedContent 1
+--   -- void $ putStrLn scopedContent
+--   return (getLineNumber (show pos), scopedContent)
 
--- for a given opening curly brace, finds the correspond closing curly brace, 
+-- for a given opening curly brace, finds the correspond closing curly brace,
 -- and returns the content between them
-getScopedContent :: Int -> Par String
-getScopedContent 0 = return " "
-getScopedContent i = do
-  b <- choice [try $ manyTill anyChar (lookAhead curly) <> fmap (: []) curly, return " "]
-  c <- case last b of
-    '{' -> getScopedContent (i + 1)
-    '}' -> getScopedContent (i -1)
-    _ -> return ""
-  return $ b ++ c
 
+parseWhole :: [Char] -> Either ParseError String
+parseWhole = runParser getScoped W "WGSL"
+  where
+    getScoped = do
+      choice [try readAll, return "error"]
+
+readAll :: Par String
+readAll = do manyTill anyChar eof
+
+-- -- finds "let" tokens and return their position so that we can raplace them with vars if applicable
+-- findLetParse :: [Char] -> Either ParseError [(Position, Name)]
+-- findLetParse =
+--   runParser manyLets W "WGSL"
 
 -- finds "let" tokens and return their position so that we can raplace them with vars if applicable
-findLetParse :: [Char] -> Either ParseError [(Position, Name)]
+-- findLetParse :: [Char] -> Either ParseError [(Position, Name)]
+findLetParse :: [Char] -> Either ParseError [Leto]
 findLetParse =
-  runParser manyLets   W   "WGSL"
+  runParser manyLets W "WGSL"
 
-manyLets :: Par [(Position, Name)]
-manyLets = do 
-  many oneLet
+-- manyLets :: Par [(Position, Name)]
+manyLets :: Par [Leto]
+manyLets = do manyTill (try letPos) eof
 
--- finds the next "let" keyword. Returns its name and position in the scope
-oneLet :: Par (Position, Name) 
-oneLet = do
-  void $ try $ tilKeyword "let "
-  pos <- getPosition
-  (varUpdateExists, varName) <- option (False, "") $ try $ lookAhead isRepeated
-  
-  if varUpdateExists
-    then return (getLineNumber (show pos), varName) 
-    else return (-1, varName)
-   
-  
--- finds whether or not a declared variable is being updated later in the file
-isRepeated :: Par (Bool, Name)
-isRepeated = do
-  name <- manyany $ char ' ' <|> char ':'
-  c <-  option "" $  manyany $ lookAhead $ try $ string (name ++ " = ") 
-  col <- case c of 
-      "" -> return ""
-      _  -> manyany $  char ' ' <|> char ':'
-  _ <- manyany eof
+-- oneLet :: Par (Position, Name)
+-- oneLet = do
+--   choice [letPos, readAll >> return (-1, "err")]
 
-  case col of 
-    "" -> return (False, "")
-    _  -> return (True, name)
+-- [letPos, return (-1, "")]
 
+-- letPos :: Par (Position, Name)
+-- letPos = do
+--   void $ (tilKeyword "let")
+--   intpos <- getLineNumber . show <$> getPosition
+--   return (intpos, "let")
+
+-- keywordLet :: GenParser Char st ()
+-- keywordLet =
+--   try
+--     ( do
+--         _ <- string "let"
+--         notFollowedBy alphaNum
+--     )
+
+-- IT WORKS:
+-- 0. return let positions that have updates
+-- 1. make sure the update of type p.xy are detected
+-- 2. replace lets
+letPos :: Par Leto
+letPos = do
+  choice
+    [ try $ do
+        meh <- manyTill anyChar $ lookAhead $ try $ string "let"
+        -- moh <- return "let "
+        moh <- try (string "let") >> return "let"
+
+        -- pos <- option (-1) $ getLineNumber . show <$> getPosition
+        return $ Leto (meh ++ moh) (-1),
+      manyTill anyChar eof >> return Errco
+    ]
+
+-- choice
+--   [ try $ do
+--       meh <- manyTill anyChar $ lookAhead $ string "let"
+--       -- moh <- return "let "
+--       moh <- string "let"
+
+--       pos <- show <$> getPosition
+--       return $ Leto (meh ++ moh) (getLineNumber pos),
+--     -- return $ Leto (meh ++ join moh) (22),
+--     do
+--       manyTill anyChar eof
+--       return $ Leto "error" (-1)
+--   ]
+
+-- getLineNumber . show <$> getPosition
+
+-- -- finds the next "let" keyword. Returns its name and position in the scope
+-- oneLet :: Par (Position, Name)
+-- oneLet = do
+--   void $ try $ tilKeyword "let "
+--   pos <- getPosition
+--   maybeName <- option Nothing $ try $ lookAhead isRepeated
+--   case maybeName of
+--     Just name -> return (getLineNumber (show pos), name)
+--     Nothing -> return (-15, "not found")
+
+-- -- finds whether or not a declared variable is being updated later in the file
+-- isRepeated :: Par (Maybe Name)
+-- isRepeated = do
+--   name <- manyany $ char ' ' <|> char ':'
+--   c <-  option "hmm" $  manyany $ lookAhead $ try $ string (name ++ " = ")
+--   col <- case c of
+--       "" -> return "nah"
+--       _  -> manyany $  char ' ' <|> char ':'
+--   _ <- manyany eof
+
+--   case col of
+--     "" -> return Nothing
+--     _  -> return $ Just name
