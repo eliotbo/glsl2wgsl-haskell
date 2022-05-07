@@ -3,16 +3,16 @@ module Language.GLSL.WGSLParser (Leto (Errco, Leto), Name, Position, Par, findLe
 import Control.Monad (join, replicateM, void)
 import Data.Char
 import Debug.Trace (trace)
-import Language.GLSL.Parser
+-- import Language.GLSL.Parser
 import Language.GLSL.Syntax
 import Text.Parsec.Pos
 import Text.ParserCombinators.Parsec hiding (State, parse)
 import Text.ParserCombinators.Parsec.Expr
 import Prelude hiding (break, exponent)
 
-data W = W
+data S = S
 
-type Par a = GenParser Char W a
+type Par a = GenParser Char S a
 
 type Name = String
 
@@ -43,8 +43,8 @@ comment' = do
 blank' :: Par ()
 blank' = try comment' <|> (space >> return ())
 
-colon' :: Par ()
-colon' = lexeme' $ char ':' >> return ()
+colon :: Par ()
+colon = lexeme' $ char ':' >> return ()
 
 curly :: Par Char
 curly = char '{' <|> char '}'
@@ -114,7 +114,7 @@ substring start end text = take (end - start) (drop start text)
 -- and returns the content between them
 
 parseWhole :: [Char] -> Either ParseError String
-parseWhole = runParser getScoped W "WGSL"
+parseWhole = runParser getScoped S "WGSL"
   where
     getScoped = do
       choice [try readAll, return "error"]
@@ -129,13 +129,13 @@ readAll = do manyTill anyChar eof
 
 -- finds "let" tokens and return their position so that we can raplace them with vars if applicable
 -- findLetParse :: [Char] -> Either ParseError [(Position, Name)]
-findLetParse :: [Char] -> Either ParseError [Leto]
+findLetParse :: [Char] -> Either ParseError String
 findLetParse =
-  runParser manyLets W "WGSL"
+  runParser manyLets S "WGSL"
 
 -- manyLets :: Par [(Position, Name)]
-manyLets :: Par [Leto]
-manyLets = do manyTill (try letPos) eof
+manyLets :: Par String
+manyLets = fmap join $ do manyTill (try checkLets) eof
 
 -- oneLet :: Par (Position, Name)
 -- oneLet = do
@@ -161,18 +161,78 @@ manyLets = do manyTill (try letPos) eof
 -- 0. return let positions that have updates
 -- 1. make sure the update of type p.xy are detected
 -- 2. replace lets
-letPos :: Par Leto
-letPos = do
+
+-- either return LET name = ...
+-- or            VAR name = ...
+-- either return ___ name: type = ...
+-- or            ___ name = ...
+
+checkLets :: Par String
+checkLets = do
   choice
     [ try $ do
-        meh <- manyTill anyChar $ lookAhead $ try $ string "let"
-        -- moh <- return "let "
-        moh <- try (string "let") >> return "let"
+        meh <- manyTill anyChar $ try $ string "let "
+        -- void $ try (string "let ")
 
-        -- pos <- option (-1) $ getLineNumber . show <$> getPosition
-        return $ Leto (meh ++ moh) (-1),
-      manyTill anyChar eof >> return Errco
+        name <- manyTill anyChar $ lookAhead typeOrSpace
+        ts <- typeOrSpace
+        -- c <- anyChar
+
+        -- ts <- typeOrSpace
+        -- typeOrSpace <-
+
+        maybeName <- lookAhead $ isRepeated name
+        if maybeName
+          then return (meh ++ "var " ++ name ++ ts)
+          else return (meh ++ "let " ++ name ++ ts),
+      manyTill anyChar eof >> return ""
     ]
+
+typeOrSpace :: Par String
+typeOrSpace = do
+  choice [try readType, string " "]
+
+-- letOrVar :: Par String
+-- letOrVar = do
+--   option "let " $
+--     (try $ do
+--         name <- manyTill anyChar (choice [try readType, string " "])
+
+--     )
+
+readType :: Par String
+readType = do
+  c <- string ": "
+  t <- manyTill anyChar (char ' ')
+  return $ ": " ++ t ++ " "
+
+-- finds whether or not a declared variable is being updated later in the file
+isRepeated :: String -> Par Bool
+isRepeated name = do
+  option
+    False
+    $ do
+      void $ try $ lookAhead $ manyany $ try $ string (name ++ " = ")
+      return True
+
+--   return "Nothing"
+-- ]
+-- case c of
+--   "Nothing" -> return Nothing
+--   x -> return $ Just name
+
+-- -- finds whether or not a declared variable is being updated later in the file
+-- isRepeated :: String -> Par (Maybe Name)
+-- isRepeated name = do
+--   c <-
+--     option
+--       "Nothing"
+--       (try $ lookAhead $ manyany $ try $ string (name ++ " = ") >> return "just")
+--   --   return "Nothing"
+--   -- ]
+--   case c of
+--     "Nothing" -> return Nothing
+--     x -> return $ Just name
 
 -- choice
 --   [ try $ do
@@ -201,15 +261,15 @@ letPos = do
 --     Nothing -> return (-15, "not found")
 
 -- -- finds whether or not a declared variable is being updated later in the file
--- isRepeated :: Par (Maybe Name)
--- isRepeated = do
---   name <- manyany $ char ' ' <|> char ':'
---   c <-  option "hmm" $  manyany $ lookAhead $ try $ string (name ++ " = ")
+-- isRepeated :: String -> Par (Maybe Name)
+-- isRepeated name = do
+--   -- name <- manyany $ char ' ' <|> char ':'
+--   c <- option "hmm" $ manyany $ lookAhead $ try $ string (name ++ " = ")
 --   col <- case c of
---       "" -> return "nah"
---       _  -> manyany $  char ' ' <|> char ':'
+--     "" -> return "nah"
+--     _ -> manyany $ char ' ' <|> char ':'
 --   _ <- manyany eof
 
 --   case col of
 --     "" -> return Nothing
---     _  -> return $ Just name
+--     _ -> return $ Just name

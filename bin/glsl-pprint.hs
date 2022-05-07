@@ -33,8 +33,9 @@ submain content = do
   co <- toIO $ parseWhole content
   -- putStrLn co
   cool <- toIO $ findLetParse co
-  print cool
-  writeFile "newCode.wgsl" (show cool)
+  putStrLn cool
+  writeFile "newCode.wgsl" (cool)
+  -- writeFile "newCode.wgsl" co
   return ""
 
 class ErrToIO a where
